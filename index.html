@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>モンスト軌道ガイド Web v0.9.1</title><meta name="theme-color" content="#20283a"><link rel="manifest" href="manifest.webmanifest">
+<title>モンスト軌道ガイド Web v1.0</title><meta name="theme-color" content="#20283a"><link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}body{margin:0;background:#121722;color:#f2f5fb;font:14px system-ui,-apple-system,sans-serif}
 header{padding:12px 14px;background:#20283a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -15,12 +15,22 @@ canvas{width:100%;height:100%;display:block;touch-action:none;user-select:none;-
 .status{color:#bac8dc;padding:8px 12px;line-height:1.6}
 .small{font-size:12px;color:#b7c6dd}
 #preview{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;padding:12px;gap:10px}#preview.open{display:flex}#preview img{max-width:100%;max-height:75vh;object-fit:contain}#preview p{margin:0;color:white;text-align:center}#preview button{font-size:16px}
+
+/* Fullscreen practice: fixed viewport, original image aspect ratio preserved */
+body.practice header,body.practice .toolbar,body.practice #wallcontrols,body.practice #modes,body.practice .status{display:none}
+body.practice main{position:fixed;inset:0;padding:0;z-index:20;background:#05080d}
+body.practice .canvaswrap{width:100%;height:100%;min-height:0;border:0;border-radius:0}
+#practicebar{display:none;position:fixed;z-index:25;top:env(safe-area-inset-top,0px);left:0;right:0;align-items:center;justify-content:space-between;gap:6px;padding:6px 10px;background:rgba(10,16,26,.75);backdrop-filter:blur(5px)}
+body.practice #practicebar{display:flex}
+#practicebar button{font-size:13px;padding:7px 9px}
+#anglehud{font-variant-numeric:tabular-nums;font-size:12px;color:white;text-shadow:0 1px 3px black}
+#quickbar{display:flex;gap:6px;align-items:center}
 </style></head>
 <body>
-<header><h1>モンスト軌道ガイド <span class="small">Web v0.9.1</span></h1><span class="small">画像処理は端末内で完結・サーバー送信なし</span></header>
+<header><h1>モンスト軌道ガイド <span class="small">Web v1.0</span></h1><span class="small">画像処理は端末内で完結・サーバー送信なし</span></header>
 <div class="toolbar">
 <label class="filebtn">画像を開く<input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/*"></label>
-<button id="export" class="savebtn">ガイド入り画像を保存</button><button id="undo">直前を削除</button><button id="clear">全消去</button><button id="resetview">表示を戻す</button><button id="restorewalls">固定壁に戻す</button>
+<button id="practice">全画面・練習モード</button><button id="export" class="savebtn">ガイド入り画像を保存</button><button id="undo">直前を削除</button><button id="clear">全消去</button><button id="resetview">表示を戻す</button><button id="restorewalls">固定壁に戻す</button>
 </div>
 <div class="toolbar" id="wallcontrols">
 <label class="check"><input id="fixedwall" type="checkbox" checked>iPhone 17 Pro Max 固定壁</label>
@@ -40,17 +50,18 @@ canvas{width:100%;height:100%;display:block;touch-action:none;user-select:none;-
 <label class="check"><input id="pull" type="checkbox" checked>引っ張り矢印</label>
 <label class="check"><input id="edge" type="checkbox" checked>矢印を端まで</label>
 <label class="check"><input id="multicolor" type="checkbox" checked>反射ごとに色分け</label>
-<label>反射数 <input id="count" type="number" min="1" max="20" value="4"></label>
+<label class="check"><input id="snap" type="checkbox" checked>1024段階スナップ</label><label>反射数 <input id="count" type="number" min="1" max="20" value="4"></label>
 <label>キャラ半径 <input id="radius" type="number" min="4" max="80" value="18"></label>
 </div>
+<div id="practicebar"><button id="exitpractice">戻る</button><span id="anglehud">角度 —</span><div id="quickbar"><button id="setplayer">キャラ指定</button><button id="practicesave" class="savebtn">保存</button></div></div>
 <main><div class="canvaswrap" id="wrap"><canvas id="cv"></canvas></div></main>
 <div id="preview" role="dialog" aria-label="保存用画像プレビュー"><p>iPhone：画像を長押しして「写真に保存」してください</p><img id="previewimg" alt="ガイド入りスクリーンショット"><button id="closepreview">閉じる</button></div>
-<div class="status" id="status">① 画像を開く（942×2048基準の固定壁が自動設定） → ② 発射キャラをタップ → ③ 敵・ブロックを配置 → ④ 照準をドラッグ。二本指で拡大・移動できます。</div>
+<div class="status" id="status">① 画像を開く（942×2048基準の固定壁が自動設定） → ② 発射キャラをタップ → ③ 敵・ブロックを配置 → ④ 画面の好きな場所からドラッグして角度を指定。二本指で拡大・移動できます。</div>
 <script>
 "use strict";
 const $=id=>document.getElementById(id), cv=$("cv"),wrap=$("wrap");
 let ctx=cv.getContext("2d"), exporting=false;
-let img=null, iw=0,ih=0,scale=1,ox=0,oy=0,zoom=1,panX=0,panY=0,mode="aim",player=null,field=null,enemies=[],blocks=[],history=[],start=null,current=null,dragging=false,aim=null;
+let img=null, iw=0,ih=0,scale=1,ox=0,oy=0,zoom=1,panX=0,panY=0,mode="aim",player=null,field=null,enemies=[],blocks=[],history=[],start=null,current=null,dragging=false,aim=null,dragVector=null,aimAngle=null,practice=false,previousMode="aim";
 const EPS=1e-5, norm=v=>{let n=Math.hypot(...v);return n<EPS?[0,0]:v.map(x=>x/n)}, reflect=(d,n)=>norm([d[0]-2*(d[0]*n[0]+d[1]*n[1])*n[0],d[1]-2*(d[0]*n[0]+d[1]*n[1])*n[1]]);
 const radius=()=>Math.max(4,Math.min(80,+$("radius").value||18));
 const REF_W=942,REF_H=2048;
@@ -76,7 +87,12 @@ if(!exporting)for(const b of blocks)rectangle(b,"#ffb000",3/scale);
 if(!exporting)for(const e of enemies)circle([e.cx,e.cy],e.r,"#ff4d6d",3/scale);
 if(!exporting&&player){circle(player,radius(),"#4dff88",3/scale);line([player[0]-7/scale,player[1]],[player[0]+7/scale,player[1]],"#4dff88",2/scale);line([player[0],player[1]-7/scale],[player[0],player[1]+7/scale],"#4dff88",2/scale)}
 if(!exporting&&dragging&&start&&current){if(mode==="field"||mode==="block")rectangle(rect(start,current),"white",2/scale,[5/scale,3/scale]);if(mode==="enemy")circle(start,Math.hypot(current[0]-start[0],current[1]-start[1]),"white",2/scale,[5/scale,3/scale])}
-if(player&&(aim||dragging&&mode==="aim")){let target=!exporting&&dragging&&mode==="aim"?current:aim;if(target)drawAim(target)}
+if(player&&(dragVector||dragging&&mode==="aim")){
+ const v=!exporting&&dragging&&mode==="aim"&&start&&current?[current[0]-start[0],current[1]-start[1]]:dragVector;
+ if(v&&Math.hypot(...v)>1){let a=Math.atan2(-v[1],-v[0]);if($('snap').checked)a=Math.round(a/(2*Math.PI)*1024)*(2*Math.PI/1024);
+ aimAngle=a;const len=Math.max(80,Math.hypot(...v));const target=[player[0]-Math.cos(a)*len,player[1]-Math.sin(a)*len];drawAim(target);
+ if(!exporting)updateAngleHud(a);
+ }}
 ctx.restore()}
 function edgeDistance(p,d,r){let vals=[];if(Math.abs(d[0])>EPS)for(let x of [r.x1,r.x2]){let t=(x-p[0])/d[0],y=p[1]+d[1]*t;if(t>=0&&y>=r.y1-EPS&&y<=r.y2+EPS)vals.push(t)}
 if(Math.abs(d[1])>EPS)for(let y of [r.y1,r.y2]){let t=(y-p[1])/d[1],x=p[0]+d[0]*t;if(t>=0&&x>=r.x1-EPS&&x<=r.x2+EPS)vals.push(t)}return vals.length?Math.min(...vals):null}
@@ -132,6 +148,7 @@ function drawMarker(p,i,u){
  ctx.fillStyle=first?"#ff4d4d":"#fff04c";ctx.fillText(String(i+1),tx,ty);
  ctx.restore();
 }
+function updateAngleHud(a){const deg=((a*180/Math.PI)%360+360)%360;const step=((Math.round(deg*1024/360)%1024)+1024)%1024;$('anglehud').textContent=deg.toFixed(3)+'° / '+step+'・1024';}
 function drawAim(target){let d=norm([player[0]-target[0],player[1]-target[1]]);if(Math.hypot(player[0]-target[0],player[1]-target[1])<2/scale)return;
 if($("pull").checked)pullArrow(target);else line(player,target,"white",2/scale,[5/scale,4/scale]);
 let result=trajectory(player,d),u=guideUnit(),colors=$("multicolor").checked;
@@ -140,15 +157,17 @@ result.hits.forEach((p,i)=>drawMarker(p,i,u));
 }
 // Touch Events are used on phones; Pointer Events on desktop. Avoid duplicate events.
 function beginAt(p){if(!inside(p)){setStatus("画像の範囲内をタッチしてください。");return}
-if(mode==="player"){save();player=p;aim=null;draw();setStatus("発射キャラを設定しました。");return}
+if(mode==="player"){save();player=p;aim=null;dragVector=null;draw();setStatus("発射キャラを設定しました。");if(practice){mode="aim";$('setplayer').textContent="キャラ指定"}return}
 dragging=true;start=p;current=p;draw()}
-function moveAt(p){if(!dragging)return;current=p;draw()}
+function moveAt(p){if(!dragging)return;current=p;scheduleDraw()}
 function finishAt(p){if(!dragging)return;current=p;
-if(mode==="aim"){aim=current;setStatus("照準を設定しました。再度ドラッグして調整できます。")}
+if(mode==="aim"){const v=[current[0]-start[0],current[1]-start[1]];if(Math.hypot(...v)>3/Math.max(scale,.1)){dragVector=v;aim=[player?player[0]+v[0]:0,player?player[1]+v[1]:0];setStatus("角度を設定しました。どこからでも再ドラッグできます。")}}
 else if(mode==="field"){let r=rect(start,current);if(r.x2-r.x1>5&&r.y2-r.y1>5){save();field=r;fixedWallMode=false;$("fixedwall").checked=false;setStatus("手動フィールドを設定しました。")}}
 else if(mode==="enemy"){let r=Math.hypot(current[0]-start[0],current[1]-start[1]);if(r>3){save();enemies.push({cx:start[0],cy:start[1],r});setStatus("敵を追加しました。")}}
 else if(mode==="block"){let r=rect(start,current);if(r.x2-r.x1>3&&r.y2-r.y1>3){save();blocks.push(r);setStatus("ブロックを追加しました。")}}
 dragging=false;start=null;current=null;draw()}
+let redrawPending=false;
+function scheduleDraw(){if(redrawPending)return;redrawPending=true;requestAnimationFrame(()=>{redrawPending=false;draw()})}
 function setStatus(s){$("status").textContent=s}
 let touchInProgress=false, gesture=null;
 function localTouch(t){let b=cv.getBoundingClientRect();return [t.clientX-b.left,t.clientY-b.top]}
@@ -198,14 +217,14 @@ setStatus("画像を読み込み中…");
 const reader=new FileReader();
 reader.onerror=()=>setStatus("画像の読み込みに失敗しました。別のPNG/JPEG画像を試してください。");
 reader.onload=()=>{const image=new Image();image.onload=()=>{
-img=image;iw=image.naturalWidth;ih=image.naturalHeight;zoom=1;panX=panY=0;player=aim=null;field=fixedWallMode?presetField():null;enemies=[];blocks=[];history=[];
+img=image;iw=image.naturalWidth;ih=image.naturalHeight;zoom=1;panX=panY=0;player=aim=dragVector=null;field=fixedWallMode?presetField():null;enemies=[];blocks=[];history=[];
 fit();setStatus(fixedWallMode?"固定壁を自動設定しました。発射キャラを選択してタップしてください。":"画像を読み込みました。フィールドをドラッグで指定してください。");
 };image.onerror=()=>setStatus("画像形式を表示できません。PNG/JPEGでお試しください。");image.src=reader.result};
 reader.readAsDataURL(f);
 });
 // Save a full-resolution PNG, independent of on-screen zoom, pan and devicePixelRatio.
 function createExportCanvas(){
- if(!img||!player||!aim){setStatus("画像・発射キャラ・照準を設定してから保存してください。");return null}
+ if(!img||!player||!dragVector){setStatus("画像・発射キャラ・照準を設定してから保存してください。");return null}
  const output=document.createElement("canvas");output.width=iw;output.height=ih;
  const old={ctx,scale,ox,oy,exporting};
  try{
@@ -213,8 +232,9 @@ function createExportCanvas(){
  }finally{ctx=old.ctx;scale=old.scale;ox=old.ox;oy=old.oy;exporting=old.exporting}
  return output
 }
-function showPreview(url){$("previewimg").src=url;$("preview").classList.add("open")}
-$("closepreview").onclick=()=>{$("preview").classList.remove("open");$("previewimg").removeAttribute("src")};
+let previewURL=null;
+function showPreview(url){if(previewURL)URL.revokeObjectURL(previewURL);previewURL=url;$("previewimg").src=url;$("preview").classList.add("open")}
+$("closepreview").onclick=()=>{$("preview").classList.remove("open");$("previewimg").removeAttribute("src");if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null}};
 $("export").onclick=()=>{
  const output=createExportCanvas();if(!output)return;
  const filename="monst_guide_"+new Date().toISOString().replace(/[:.]/g,"-")+".png";
@@ -233,14 +253,20 @@ $("export").onclick=()=>{
   }
  },"image/png");
 };
-$("resetview").onclick=()=>{zoom=1;panX=panY=0;fit();setStatus("画像表示を全体表示に戻しました。")};
+function togglePractice(on){practice=on;document.body.classList.toggle('practice',on);if(on){previousMode=mode;mode='aim';$('practice').textContent='練習モード中';$('setplayer').textContent='キャラ指定';setStatus('画面のどこからでもドラッグして角度を指定できます。')}else{mode=previousMode;$('practice').textContent='全画面・練習モード'}
+zoom=1;panX=panY=0;fit();setTimeout(fit,150)}
+$('practice').onclick=()=>{if(!img){setStatus('先にスクリーンショットを読み込んでください。');return}togglePractice(true)};
+$('exitpractice').onclick=()=>togglePractice(false);
+$('setplayer').onclick=()=>{mode=mode==='player'?'aim':'player';$('setplayer').textContent=mode==='player'?'画面をタップ':'キャラ指定'};
+$('practicesave').onclick=()=>$('export').click();
+$('resetview').onclick=()=>{zoom=1;panX=panY=0;fit();setStatus("画像表示を全体表示に戻しました。")};
 cv.addEventListener("wheel",e=>{if(!img)return;e.preventDefault();const b=cv.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;const ix=(mx-ox)/scale,iy=(my-oy)/scale;zoom=Math.min(8,Math.max(1,zoom*(e.deltaY<0?1.15:1/1.15)));const base=Math.min(wrap.clientWidth/iw,wrap.clientHeight/ih);panX=mx-ix*base*zoom-(wrap.clientWidth-iw*base)/2+iw*base*(zoom-1)/2;panY=my-iy*base*zoom-(wrap.clientHeight-ih*base)/2+ih*base*(zoom-1)/2;fit()},{passive:false});
-$("undo").onclick=()=>{if(!history.length)return;({player,field,enemies,blocks}=JSON.parse(history.pop()));aim=null;draw()};
-$("clear").onclick=()=>{save();player=aim=null;field=fixedWallMode?presetField():null;enemies=[];blocks=[];draw()};
+$("undo").onclick=()=>{if(!history.length)return;({player,field,enemies,blocks}=JSON.parse(history.pop()));aim=dragVector=null;draw()};
+$("clear").onclick=()=>{save();player=aim=dragVector=null;field=fixedWallMode?presetField():null;enemies=[];blocks=[];draw()};
 $("fixedwall").addEventListener("change",updateFixedWalls);
 for(const id of ["wallleft","wallright","walltop","wallbottom"])$(id).addEventListener("change",()=>{let w=currentWalls();if(!(w.left<w.right&&w.top<w.bottom)){setStatus("壁の座標が逆転しています。左＜右、上＜下にしてください。");return}if(fixedWallMode){field=presetField();draw();setStatus("固定壁の位置を更新しました。")}});
 $("restorewalls").onclick=()=>{setWallInputs(defaultWalls);$("fixedwall").checked=true;updateFixedWalls();setStatus("固定壁の初期値に戻しました。");};
-for(const id of ["shot","anti","pull","edge","count","radius","multicolor"])$(id).addEventListener("input",draw);
+for(const id of ["shot","anti","pull","edge","count","radius","multicolor","snap"])$(id).addEventListener("input",draw);
 window.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();$("undo").click()}});
 if(typeof ResizeObserver!=="undefined")new ResizeObserver(fit).observe(wrap);else window.addEventListener("resize",fit);if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("./sw.js").catch(()=>{});fit();
 </script></body></html>
