@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>モンスト軌道ガイド Web v1.2</title><meta name="theme-color" content="#20283a"><link rel="manifest" href="manifest.webmanifest">
+<title>モンスト軌道ガイド Web v1.3</title><meta name="theme-color" content="#20283a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}body{margin:0;background:#121722;color:#f2f5fb;font:14px system-ui,-apple-system,sans-serif}
 header{padding:12px 14px;background:#20283a;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -30,20 +30,16 @@ body.practice #practicebar{display:flex}
 #practicebar.collapsed #quickbar,#practicebar.collapsed #anglehud,#practicebar.collapsed #exitpractice{display:none}
 #practicebar #togglebar{min-width:37px;min-height:36px;font-weight:700}
 body.practice{overflow:hidden;overscroll-behavior:none}
-body.practice main{height:100dvh}
-/* The game screenshot is positioned at the top of the viewport; no toolbar consumes vertical space. */
-#practicebar{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:auto;right:12px;max-width:min(94vw,410px);align-items:flex-end;flex-direction:column}
-#practicebar #togglebar{align-self:flex-end;background:rgba(12,22,36,.42)}
-#practicebar #quickbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
-#practicebar.collapsed #quickbar{display:none}
-#practicebar input[type=number]{width:88px;font-size:16px;padding:7px 4px;text-align:center;background:rgba(14,22,35,.7)}
-#practicebar .angleentry{display:flex;gap:4px;align-items:center;width:100%;justify-content:flex-end;color:white;font-size:12px}
-#practicebar .angleentry button{font-size:17px;min-width:33px;padding:6px}
-#practicebar .angleentry label{white-space:nowrap}
-body.practice #practicebar{background:rgba(9,15,25,.24)}
+/* Full physical viewport: screenshot includes the original status bar and home indicator. */
+html,body{width:100%;min-height:100%;margin:0}
+body.practice{position:fixed;inset:0;width:100%;height:100%;height:100dvh}
+body.practice main{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;height:100dvh}
+body.practice .canvaswrap{position:absolute;inset:0;width:100%;height:100%}
+@supports(height:100svh){body.practice,body.practice main{height:100svh}}
+
 </style></head>
 <body>
-<header><h1>モンスト軌道ガイド <span class="small">Web v1.2</span></h1><span class="small">画像処理は端末内で完結・サーバー送信なし</span></header>
+<header><h1>モンスト軌道ガイド <span class="small">Web v1.3</span></h1><span class="small">画像処理は端末内で完結・サーバー送信なし</span></header>
 <div class="toolbar">
 <label class="filebtn">画像を開く<input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/*"></label>
 <button id="practice">全画面・練習モード</button><button id="export" class="savebtn">ガイド入り画像を保存</button><button id="undo">直前を削除</button><button id="clear">全消去</button><button id="resetview">表示を戻す</button><button id="restorewalls">固定壁に戻す</button>
@@ -63,11 +59,13 @@ body.practice #practicebar{background:rgba(9,15,25,.24)}
 <div class="toolbar">
 <label>タイプ <select id="shot"><option value="reflect">反射</option><option value="pierce">貫通</option></select></label>
 <label class="check"><input id="anti" type="checkbox">アンチブロック</label>
+<label class="check"><input id="pull" type="checkbox" checked>引っ張り矢印</label>
+<label class="check"><input id="edge" type="checkbox" checked>矢印を端まで</label>
 <label class="check"><input id="multicolor" type="checkbox" checked>反射ごとに色分け</label>
 <label class="check"><input id="snap" type="checkbox" checked>1024段階スナップ</label><label>反射数 <input id="count" type="number" min="1" max="20" value="4"></label>
 <label>キャラ半径 <input id="radius" type="number" min="4" max="80" value="18"></label>
 </div>
-<div id="practicebar" class="collapsed"><button id="togglebar" aria-label="メニュー表示切替">☰</button><div id="quickbar"><div class="angleentry"><label for="angleinput">発射角</label><button id="angleminus" aria-label="角度を1段階減らす">−</button><input id="angleinput" type="number" inputmode="decimal" step="0.3515625" min="0" max="359.999" placeholder="0.000"><span>°</span><button id="angleplus" aria-label="角度を1段階増やす">＋</button></div><button id="setplayer">キャラ指定</button><button id="viewfill">全体表示</button><button id="practicesave" class="savebtn">保存</button><button id="exitpractice">戻る</button></div></div>
+<div id="practicebar"><button id="togglebar" aria-label="メニュー表示切替">☰</button><button id="exitpractice">戻る</button><span id="anglehud">角度 —</span><div id="quickbar"><button id="viewfill">画面に合わせる</button><button id="setplayer">キャラ指定</button><button id="practicesave" class="savebtn">保存</button></div></div>
 <main><div class="canvaswrap" id="wrap"><canvas id="cv"></canvas></div></main>
 <div id="preview" role="dialog" aria-label="保存用画像プレビュー"><p>iPhone：画像を長押しして「写真に保存」してください</p><img id="previewimg" alt="ガイド入りスクリーンショット"><button id="closepreview">閉じる</button></div>
 <div class="status" id="status">① 画像を開く（942×2048基準の固定壁が自動設定） → ② 発射キャラをタップ → ③ 敵・ブロックを配置 → ④ 画面の好きな場所からドラッグして角度を指定。二本指で拡大・移動できます。</div>
@@ -75,7 +73,7 @@ body.practice #practicebar{background:rgba(9,15,25,.24)}
 "use strict";
 const $=id=>document.getElementById(id), cv=$("cv"),wrap=$("wrap");
 let ctx=cv.getContext("2d"), exporting=false;
-let img=null, iw=0,ih=0,scale=1,ox=0,oy=0,zoom=1,panX=0,panY=0,mode="aim",player=null,field=null,enemies=[],blocks=[],history=[],start=null,current=null,dragging=false,aim=null,dragVector=null,aimAngle=null,practice=false,previousMode="aim",coverView=false;
+let img=null, iw=0,ih=0,scale=1,ox=0,oy=0,zoom=1,panX=0,panY=0,mode="aim",player=null,field=null,enemies=[],blocks=[],history=[],start=null,current=null,dragging=false,aim=null,dragVector=null,aimAngle=null,practice=false,previousMode="aim",coverView=false,exactScreen=true;
 const EPS=1e-5, norm=v=>{let n=Math.hypot(...v);return n<EPS?[0,0]:v.map(x=>x/n)}, reflect=(d,n)=>norm([d[0]-2*(d[0]*n[0]+d[1]*n[1])*n[0],d[1]-2*(d[0]*n[0]+d[1]*n[1])*n[1]]);
 const radius=()=>Math.max(4,Math.min(80,+$("radius").value||18));
 const REF_W=942,REF_H=2048;
@@ -86,7 +84,8 @@ function setWallInputs(w){$("wallleft").value=w.left;$("wallright").value=w.righ
 function presetField(){if(!img)return null;let w=currentWalls();return {x1:w.left*iw/REF_W,x2:w.right*iw/REF_W,y1:w.top*ih/REF_H,y2:w.bottom*ih/REF_H}}
 function updateFixedWalls(){fixedWallMode=$("fixedwall").checked;if(fixedWallMode)field=presetField();draw();setStatus(fixedWallMode?"固定壁を使用中。キャラ位置は手動で指定してください。":"手動フィールドモードです。フィールドをドラッグで設定してください。")}
 
-function fit(){const w=wrap.clientWidth,h=wrap.clientHeight,dpr=devicePixelRatio||1;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);let base=img?(practice?(coverView?Math.max(w/iw,h/ih):w/iw):Math.min(w/iw,h/ih)):1;scale=base*zoom;ox=(w-iw*base)/2+panX-(iw*base*(zoom-1))/2;oy=(practice?0:(h-ih*base)/2)+panY-(ih*base*(zoom-1))/2;draw()}
+function baseScale(w,h){return img?(practice&&exactScreen?w/iw:(practice&&coverView?Math.max(w/iw,h/ih):Math.min(w/iw,h/ih))):1}
+function fit(){const w=wrap.clientWidth,h=wrap.clientHeight,dpr=Math.min(devicePixelRatio||1,3);if(!w||!h)return;const pw=Math.round(w*dpr),ph=Math.round(h*dpr);if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph}ctx.setTransform(dpr,0,0,dpr,0,0);let base=baseScale(w,h);scale=base*zoom;ox=(w-iw*base)/2+panX-(iw*base*(zoom-1))/2;oy=(h-ih*base)/2+panY-(ih*base*(zoom-1))/2;draw()}
 function pt(e){let b=cv.getBoundingClientRect();return [(e.clientX-b.left-ox)/scale,(e.clientY-b.top-oy)/scale]}
 function inside(p){return img&&p[0]>=0&&p[0]<=iw&&p[1]>=0&&p[1]<=ih}
 function save(){history.push(JSON.stringify({player,field,enemies,blocks}));if(history.length>100)history.shift()}
@@ -108,6 +107,17 @@ if(player&&(dragVector||dragging&&mode==="aim")){
  if(!exporting)updateAngleHud(a);
  }}
 ctx.restore()}
+function edgeDistance(p,d,r){let vals=[];if(Math.abs(d[0])>EPS)for(let x of [r.x1,r.x2]){let t=(x-p[0])/d[0],y=p[1]+d[1]*t;if(t>=0&&y>=r.y1-EPS&&y<=r.y2+EPS)vals.push(t)}
+if(Math.abs(d[1])>EPS)for(let y of [r.y1,r.y2]){let t=(y-p[1])/d[1],x=p[0]+d[0]*t;if(t>=0&&x>=r.x1-EPS&&x<=r.x2+EPS)vals.push(t)}return vals.length?Math.min(...vals):null}
+function pullArrow(target){let v=[target[0]-player[0],target[1]-player[1]],l=Math.hypot(...v);if(l<4/scale)return;let d=norm(v),perp=[-d[1],d[0]],arrowLen;
+if($("edge").checked){let t=edgeDistance(player,d,field||{x1:0,y1:0,x2:iw,y2:ih});arrowLen=t===null?Math.max(l,45/scale):Math.max(0,t-5/scale)}
+else arrowLen=Math.min(Math.max(l,45/scale),260/scale);
+let tip=[player[0]+d[0]*arrowLen,player[1]+d[1]*arrowLen];
+for(const [width,head,color] of [[54,46,"#ff4a2f"],[42,38,"#ff9a2e"],[30,31,"#ffe04a"],[18,24,"#b9f04b"]]){
+let hw=width/(2*scale),hh=head/scale,neck=[tip[0]-d[0]*hh,tip[1]-d[1]*hh],points=[];
+for(const [base,side] of [[player,hw],[neck,hw*.58],[neck,hw],[tip,0],[neck,-hw],[neck,-hw*.58],[player,-hw]])points.push([base[0]+perp[0]*side,base[1]+perp[1]*side]);
+ctx.beginPath();ctx.moveTo(...points[0]);for(let i=1;i<points.length;i++)ctx.lineTo(...points[i]);ctx.closePath();ctx.fillStyle=color;ctx.fill()}
+line(player,tip,"#fff6c7",2/scale);ctx.beginPath();ctx.arc(...target,4/scale,0,2*Math.PI);ctx.fillStyle="white";ctx.fill()}
 function rayCircle(p,d,e,r){let ox=p[0]-e.cx,oy=p[1]-e.cy,b=2*(ox*d[0]+oy*d[1]),c=ox*ox+oy*oy-r*r,disc=b*b-4*c;if(disc<0)return null;let ts=[(-b-Math.sqrt(disc))/2,(-b+Math.sqrt(disc))/2].filter(t=>t>.01);if(!ts.length)return null;let t=Math.min(...ts),q=[p[0]+d[0]*t,p[1]+d[1]*t];return {t,q,n:norm([q[0]-e.cx,q[1]-e.cy]),kind:"enemy"}}
 function rayRect(p,d,r){let tmin=-Infinity,tmax=Infinity,normal=null;for(let i=0;i<2;i++){let low=i?r.y1:r.x1,high=i?r.y2:r.x2;if(Math.abs(d[i])<EPS){if(p[i]<low||p[i]>high)return null;continue}
 let a=(low-p[i])/d[i],b=(high-p[i])/d[i],n1=i?[0,-1]:[-1,0],n2=i?[0,1]:[1,0];if(a>b){[a,b]=[b,a];[n1,n2]=[n2,n1]}if(a>tmin){tmin=a;normal=n1}tmax=Math.min(tmax,b);if(tmin>tmax)return null}
@@ -151,9 +161,9 @@ function drawMarker(p,i,u){
  ctx.fillStyle=first?"#ff4d4d":"#fff04c";ctx.fillText(String(i+1),tx,ty);
  ctx.restore();
 }
-function updateAngleHud(a){const input=$('angleinput');if(document.activeElement!==input){const deg=((a*180/Math.PI)%360+360)%360;input.value=deg.toFixed(3)}}
+function updateAngleHud(a){const deg=((a*180/Math.PI)%360+360)%360;const step=((Math.round(deg*1024/360)%1024)+1024)%1024;$('anglehud').textContent=deg.toFixed(3)+'° / '+step+'・1024';}
 function drawAim(target){let d=norm([player[0]-target[0],player[1]-target[1]]);if(Math.hypot(player[0]-target[0],player[1]-target[1])<2/scale)return;
-// Pull-arrow overlay intentionally removed; only the actual trajectory is shown.
+if($("pull").checked)pullArrow(target);else line(player,target,"white",2/scale,[5/scale,4/scale]);
 let result=trajectory(player,d),u=guideUnit(),colors=$("multicolor").checked;
 result.segments.forEach(([a,b],i)=>routeStroke(a,b,colors?ROUTE_COLORS[i%ROUTE_COLORS.length]:"#63ff4d",u));
 result.hits.forEach((p,i)=>drawMarker(p,i,u));
@@ -184,9 +194,9 @@ function updateGesture(touches){if(!gesture)return;
  const a=localTouch(touches[0]),b=localTouch(touches[1]),mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
  const dist=Math.max(1,Math.hypot(a[0]-b[0],a[1]-b[1]));
  zoom=Math.min(8,Math.max(1,gesture.initialZoom*dist/gesture.distance));
- const w=wrap.clientWidth,h=wrap.clientHeight,base=practice?(coverView?Math.max(w/iw,h/ih):w/iw):Math.min(w/iw,h/ih);
+ const w=wrap.clientWidth,h=wrap.clientHeight,base=practice&&coverView?Math.max(w/iw,h/ih):Math.min(w/iw,h/ih);
  panX=mid[0]-gesture.anchor[0]*base*zoom-(w-iw*base)/2+iw*base*(zoom-1)/2;
- panY=mid[1]-gesture.anchor[1]*base*zoom-(practice?0:(h-ih*base)/2)+ih*base*(zoom-1)/2;
+ panY=mid[1]-gesture.anchor[1]*base*zoom-(h-ih*base)/2+ih*base*(zoom-1)/2;
  fit();
 }
 
@@ -256,36 +266,24 @@ $("export").onclick=()=>{
   }
  },"image/png");
 };
-function togglePractice(on){practice=on;document.body.classList.toggle('practice',on);if(on){previousMode=mode;mode='aim';$('practicebar').classList.add('collapsed');$('practice').textContent='練習モード中';$('setplayer').textContent='キャラ指定';setStatus('画面のどこからでもドラッグして角度を指定できます。')}else{mode=previousMode;$('practice').textContent='全画面・練習モード'}
+function togglePractice(on){practice=on;document.body.classList.toggle('practice',on);if(on){previousMode=mode;mode='aim';$('practicebar').classList.add('collapsed');exactScreen=true;coverView=false;$('viewfill').textContent='全体表示に切替';$('practice').textContent='練習モード中';$('setplayer').textContent='キャラ指定';setStatus('画面のどこからでもドラッグして角度を指定できます。')}else{mode=previousMode;$('practice').textContent='全画面・練習モード'}
 zoom=1;panX=panY=0;fit();setTimeout(fit,150)}
 $('practice').onclick=()=>{if(!img){setStatus('先にスクリーンショットを読み込んでください。');return}togglePractice(true)};
 $('exitpractice').onclick=()=>togglePractice(false);
 $('setplayer').onclick=()=>{mode=mode==='player'?'aim':'player';$('setplayer').textContent=mode==='player'?'画面をタップ':'キャラ指定'};
 $('practicesave').onclick=()=>$('export').click();
 $('togglebar').onclick=()=>{$('practicebar').classList.toggle('collapsed')};
-function applyAngleDegrees(value){
- if(!img||!player||!Number.isFinite(value)){setStatus('先に画像と発射キャラを指定してください。');return}
- let deg=((value%360)+360)%360;
- if($('snap').checked)deg=(Math.round(deg*1024/360)%1024)*360/1024;
- const a=deg*Math.PI/180;
- dragVector=[-Math.cos(a)*120,-Math.sin(a)*120];
- aimAngle=a;aim=[player[0]+dragVector[0],player[1]+dragVector[1]];
- $('angleinput').value=deg.toFixed(3);draw();
-}
-$('angleinput').addEventListener('change',()=>applyAngleDegrees(Number($('angleinput').value)));
-$('angleminus').onclick=()=>applyAngleDegrees((aimAngle??0)*180/Math.PI-360/1024);
-$('angleplus').onclick=()=>applyAngleDegrees((aimAngle??0)*180/Math.PI+360/1024);
-$('viewfill').onclick=()=>{coverView=!coverView;$('viewfill').textContent=coverView?'全体表示':'画面に合わせる';zoom=1;panX=panY=0;fit()};
+$('viewfill').onclick=()=>{exactScreen=!exactScreen;coverView=false;$('viewfill').textContent=exactScreen?'全体表示に切替':'画面一致に戻す';zoom=1;panX=panY=0;fit()};
 window.addEventListener('orientationchange',()=>setTimeout(fit,200));
 if(window.visualViewport)window.visualViewport.addEventListener('resize',()=>{if(practice)fit()});
 $('resetview').onclick=()=>{zoom=1;panX=panY=0;fit();setStatus("画像表示を全体表示に戻しました。")};
-cv.addEventListener("wheel",e=>{if(!img)return;e.preventDefault();const b=cv.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;const ix=(mx-ox)/scale,iy=(my-oy)/scale;zoom=Math.min(8,Math.max(1,zoom*(e.deltaY<0?1.15:1/1.15)));const base=practice?(coverView?Math.max(wrap.clientWidth/iw,wrap.clientHeight/ih):wrap.clientWidth/iw):Math.min(wrap.clientWidth/iw,wrap.clientHeight/ih);panX=mx-ix*base*zoom-(wrap.clientWidth-iw*base)/2+iw*base*(zoom-1)/2;panY=my-iy*base*zoom-(practice?0:(wrap.clientHeight-ih*base)/2)+ih*base*(zoom-1)/2;fit()},{passive:false});
+cv.addEventListener("wheel",e=>{if(!img)return;e.preventDefault();const b=cv.getBoundingClientRect(),mx=e.clientX-b.left,my=e.clientY-b.top;const ix=(mx-ox)/scale,iy=(my-oy)/scale;zoom=Math.min(8,Math.max(1,zoom*(e.deltaY<0?1.15:1/1.15)));const base=baseScale(wrap.clientWidth,wrap.clientHeight);panX=mx-ix*base*zoom-(wrap.clientWidth-iw*base)/2+iw*base*(zoom-1)/2;panY=my-iy*base*zoom-(wrap.clientHeight-ih*base)/2+ih*base*(zoom-1)/2;fit()},{passive:false});
 $("undo").onclick=()=>{if(!history.length)return;({player,field,enemies,blocks}=JSON.parse(history.pop()));aim=dragVector=null;draw()};
 $("clear").onclick=()=>{save();player=aim=dragVector=null;field=fixedWallMode?presetField():null;enemies=[];blocks=[];draw()};
 $("fixedwall").addEventListener("change",updateFixedWalls);
 for(const id of ["wallleft","wallright","walltop","wallbottom"])$(id).addEventListener("change",()=>{let w=currentWalls();if(!(w.left<w.right&&w.top<w.bottom)){setStatus("壁の座標が逆転しています。左＜右、上＜下にしてください。");return}if(fixedWallMode){field=presetField();draw();setStatus("固定壁の位置を更新しました。")}});
 $("restorewalls").onclick=()=>{setWallInputs(defaultWalls);$("fixedwall").checked=true;updateFixedWalls();setStatus("固定壁の初期値に戻しました。");};
-for(const id of ["shot","anti","count","radius","multicolor","snap"])$(id).addEventListener("input",draw);
+for(const id of ["shot","anti","pull","edge","count","radius","multicolor","snap"])$(id).addEventListener("input",draw);
 window.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();$("undo").click()}});
 if(typeof ResizeObserver!=="undefined")new ResizeObserver(fit).observe(wrap);else window.addEventListener("resize",fit);if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("./sw.js").catch(()=>{});fit();
 </script></body></html>
